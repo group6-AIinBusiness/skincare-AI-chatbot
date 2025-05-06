@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Skincare AI</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #d4e6ff;
+            --secondary-color: #4a90e2;
+            --user-color: #e6f0ff;
+            --text-color: #333;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 0;
+            background-color: #f0f7ff;
+        }
+        
+        .header {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+        }
+        
+        .chat-container {
+            background-color: white;
+            height: 500px;
+            overflow-y: auto;
+            padding: 15px;
+            border-left: 1px solid #ddd;
+            border-right: 1px solid #ddd;
+        }
+        
+        .message {
+            padding: 12px 15px;
+            border-radius: 18px;
+            margin-bottom: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+            position: relative;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        
+        .bot-message {
+            background-color: white;
+            border: 1px solid var(--primary-color);
+            align-self: flex-start;
+            margin-right: auto;
+            color: var(--text-color);
+        }
+        
+        .user-message {
+            background-color: var(--user-color);
+            align-self: flex-end;
+            margin-left: auto;
+        }
+        
+        .options {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .option-btn {
+            padding: 8px 12px;
+            background-color: var(--secondary-color);
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .option-btn:hover {
+            background-color: #3a7bc8;
+        }
+        
+        .uploaded-image {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+        
+        .restart-btn {
+            background-color: #4CAF50;
+            margin-top: 10px;
+        }
+        
+        .bot-icon {
+            color: var(--secondary-color);
+            font-size: 20px;
+        }
+        
+        /* Ẩn hoàn toàn input file */
+        #file-input {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-title">
+            <i class="fas fa-robot bot-icon"></i>
+            <span>Skincare AI</span>
+        </div>
+    </div>
+    
+    <div class="chat-container" id="chat-container">
+        <div class="message bot-message">
+            <div class="message-text">Xin chào! Tôi là Skincare AI. Hãy cập nhập tình trạng da hiện tại của bạn để tôi phân tích nhé!</div>
+            <div class="options">
+                <button class="option-btn" onclick="document.getElementById('file-input').click()">
+                    <i class="fas fa-upload"></i> Tải ảnh lên
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="file-input" accept="image/*">
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script type="text/javascript">
+        // Model URL
+        const URL = "https://teachablemachine.withgoogle.com/models/cXteVc95e/";
+        let model, imageElement, maxPredictions;
+        let currentSkinType = '';
+        let isWaitingForResponse = false;
+
+        // Skin care recommendations
+        const skinCareTips = {
+            "bình thường": [
+                "Bạn đang có một làn da tốt, tuy nhiên cũng cần chú ý:",
+                "Làm sạch da sáng/tối, kết hợp toner để cân bằng độ ẩm cho da, cũng đừng quên sử dụng kem chống nắng cho da nhé!",
+                "Quan trọng nhất là chế độ ăn uống, nghỉ ngơi hợp lý để duy trì trạng thái tốt nhất cho cơ thể và cả làn da.",
+                "Tối giản routine skincare cũng là một phần giúp da được thở nữa nè!",
+                "Yêu thương bản thân cũng là một cách yêu thương làn da đúng đắn nhất nhé bạn! Chúc bạn luôn có một làn da khỏe mạnh!"
+            ],
+            "xuất hiện mụn ẩn": [
+                "Tình trạng bít tắc lỗ chân lông do dầu thừa, tế bào chết hay mỹ phẩm chính là nguyên nhân dẫn đến mụn ẩn. Vì vậy bạn cần chú ý:",
+                "Sử dụng tẩy trang dạng nước (Micellar Water) hoặc dầu nhẹ dịu.",
+                "Kết hợp sử dụng sữa rửa mặt dịu nhẹ, pH 5.5 đến 6.0, không hạt.",
+                "Tẩy da chết hóa học 2 đến 3 lần/tuần với BHA (Salicylic Acid 1 đến 2%).",
+                "Dưỡng ẩm với Gel hoặc lotion chứa Niacinamide, Panthenol.",
+                "Điều trị mụn với Retinol hoặc chấm mụn chứa BHA (tham khảo ý kiến bác sĩ da liễu trước khi sử dụng).",
+                "Quan trọng nhất là chế độ ăn uống, nghỉ ngơi hợp lý để duy trì trạng thái tốt nhất cho cơ thể và cả làn da.",
+                "Yêu thương bản thân cũng là một cách yêu thương làn da đúng đắn nhất nhé bạn! Chúc bạn luôn có một làn da khỏe mạnh!"
+            ],
+            "có mụn đầu đen": [
+                "Bã nhờn tích tụ trong lỗ chân lông bị oxy hóa do không làm sạch kỹ vùng chữ T, lạm dụng sản phẩm chứa dầu là nguyên nhân chính gây nên mụn đầu đen. Bạn cần chú ý:",
+                "Sử dụng dầu tẩy trang nhũ hóa tốt.",
+                "Kết hợp sử dụng sữa rửa mặt có BHA nhẹ hoặc than hoạt tính.",
+                "Tẩy da chết hóa học 2 đến 3 lần/tuần với BHA (Salicylic Acid 2%) hoặc AHA mix BHA.",
+                "Dưỡng ẩm với Gel không chứa dầu.",
+                "Sử dụng mặt nạ đất sét 1 lần 2 lần/tuần và serum Niacinamide.",
+                "Quan trọng nhất là chế độ ăn uống, nghỉ ngơi hợp lý để duy trì trạng thái tốt nhất cho cơ thể và cả làn da.",
+                "Yêu thương bản thân cũng là một cách yêu thương làn da đúng đắn nhất nhé bạn! Chúc bạn luôn có một làn da khỏe mạnh!"
+            ],
+            "bị viêm (mụn viêm)": [
+                "Mụn viêm là tình trạng da đang chịu thương tổn nặng, nếu không được xử lý kịp thời và đúng cách sẽ để lại thâm sẹo. Bạn cần chú ý:",
+                "Sử dụng tẩy trang dạng nước dịu nhẹ (cho da nhạy cảm).",
+                "Kết hợp sử dụng sữa rửa mặt dịu nhẹ, không tạo bọt mạnh.",
+                "Toner phục hồi có thành phần Centella, Panthenol, HA.",
+                "Tham khảo kết hợp cùng serum đặc trị, như: Benzoyl Peroxide 2.5 đến 5%, Tea Tree Oil, Niacinamide (tham khảo ý kiến bác sĩ da liễu trước khi sử dụng).",
+                "Phục hồi làn da với kem dưỡng có Ceramide, HA, hoặc Zinc PCA.",
+                "Quan trọng nhất là chế độ ăn uống, nghỉ ngơi hợp lý để duy trì trạng thái tốt nhất cho cơ thể và cả làn da.",
+                "Yêu thương bản thân cũng là một cách yêu thương làn da đúng đắn nhất nhé bạn! Chúc bạn luôn có một làn da khỏe mạnh!"
+            ]
+        };
+
+        // Add message to chat
+        function addMessage(text, isBot = true) {
+            const chatContainer = document.getElementById('chat-container');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isBot ? 'bot-message' : 'user-message'}`;
+            
+            if (isBot && text.includes('<strong>')) {
+                messageDiv.innerHTML = `<div class="message-text"><i class="fas fa-robot bot-icon"></i> ${text}</div>`;
+            } else if (isBot) {
+                messageDiv.innerHTML = `<div class="message-text"><i class="fas fa-robot bot-icon"></i> ${text}</div>`;
+            } else {
+                messageDiv.innerHTML = `<div class="message-text">${text}</div>`;
+            }
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Add options buttons
+        function addOptions(options) {
+            const optionsDiv = document.createElement('div');
+            optionsDiv.className = 'options';
+            
+            options.forEach(option => {
+                const button = document.createElement('button');
+                button.className = 'option-btn';
+                button.innerHTML = option.icon ? `<i class="${option.icon}"></i> ${option.text}` : option.text;
+                button.onclick = option.action;
+                optionsDiv.appendChild(button);
+            });
+            
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.appendChild(optionsDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Show skin care recommendations
+        function showSkinCareTips() {
+            if (!currentSkinType || !skinCareTips[currentSkinType]) {
+                addMessage("Xin lỗi, tôi không tìm thấy gợi ý chăm sóc phù hợp cho loại da này.");
+                return;
+            }
+            
+            addMessage(`Dưới đây là một số gợi ý chăm sóc cho <strong>${currentSkinType}</strong>:`);
+            
+            const tipsList = skinCareTips[currentSkinType].map(tip => `• ${tip}`).join('<br>');
+            addMessage(tipsList);
+            
+            showRestartOption();
+        }
+
+        // Show restart option
+        function showRestartOption() {
+            addMessage("Bạn có muốn bắt đầu cuộc trò chuyện mới không?");
+            addOptions([
+                {
+                    text: "Bắt đầu mới",
+                    icon: "fas fa-redo",
+                    action: restartConversation
+                }
+            ]);
+        }
+
+        // Restart conversation
+        function restartConversation() {
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.innerHTML = '';
+            currentSkinType = '';
+            addMessage("Xin chào! Tôi là Skincare AI. Hãy cập nhập tình trạng da hiện tại của bạn để tôi phân tích nhé!");
+            addOptions([
+                {
+                    text: "Tải ảnh lên",
+                    icon: "fas fa-upload",
+                    action: () => document.getElementById('file-input').click()
+                }
+            ]);
+        }
+
+        // Load the image model
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            try {
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+                console.log("Model loaded successfully!");
+
+                // Set up file input
+                document.getElementById('file-input').addEventListener('change', loadImage);
+            } catch (error) {
+                console.error("Error loading model:", error);
+                addMessage("Xin lỗi, có lỗi xảy ra khi tải mô hình phân tích da. Vui lòng thử lại sau.");
+            }
+        }
+
+        // Load image from file input and predict
+        function loadImage(event) {
+            const reader = new FileReader();
+            reader.onload = function () {
+                imageElement = new Image();
+                imageElement.src = reader.result;
+                imageElement.onload = function() {
+                    // Display image in chat
+                    addMessage("Đã tải ảnh lên.", false);
+                    
+                    const imageContainer = document.createElement('div');
+                    imageContainer.innerHTML = `<img src="${reader.result}" class="uploaded-image">`;
+                    
+                    const chatContainer = document.getElementById('chat-container');
+                    const lastMessage = chatContainer.lastChild;
+                    lastMessage.appendChild(imageContainer);
+                    
+                    // Run prediction
+                    predict(imageElement);
+                };
+            };
+            reader.readAsDataURL(event.target.files[0]);
+        }
+
+        // Run prediction
+        async function predict(image) {
+            try {
+                const prediction = await model.predict(image);
+                
+                // Find the highest probability class
+                let highestProb = 0;
+                let mainSkinType = '';
+                
+                for (let i = 0; i < maxPredictions; i++) {
+                    if (prediction[i].probability > highestProb) {
+                        highestProb = prediction[i].probability;
+                        mainSkinType = prediction[i].className;
+                    }
+                }
+                
+                currentSkinType = mainSkinType;
+                addMessage(`Kết quả phân tích: Hiện tại, làn da của ban đang <strong>${mainSkinType}</strong> với độ chính xác ${(highestProb * 100).toFixed(2)}%.`);
+                
+                // Ask if user wants skin care tips
+                addMessage("Bạn có muốn nhận gợi ý cách chăm sóc da phù hợp không?");
+                addOptions([
+                    {
+                        text: "Có, cho tôi gợi ý",
+                        icon: "fas fa-heart",
+                        action: showSkinCareTips
+                    },
+                    {
+                        text: "Không, cảm ơn",
+                        icon: "fas fa-times",
+                        action: () => {
+                            addMessage("Cảm ơn bạn đã sử dụng dịch vụ. Chúc bạn có làn da khỏe mạnh!");
+                            showRestartOption();
+                        }
+                    }
+                ]);
+                
+            } catch (error) {
+                console.error("Error during prediction:", error);
+                addMessage("Xin lỗi, có lỗi xảy ra khi phân tích hình ảnh. Vui lòng thử lại với ảnh khác.");
+            }
+        }
+
+        // Initialize when page loads
+        window.onload = function() {
+            init();
+        };
+    </script>
+</body>
+</html>
